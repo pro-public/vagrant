@@ -1,0 +1,77 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+  # Definir la caja base de Ubuntu 20.04
+  config.vm.box = "ubuntu/focal64"
+
+  # Configurar la red para permitir el acceso desde la máquina host
+  config.vm.network "forwarded_port", guest: 8080, host: 8080
+
+  # Provisión de la máquina virtual
+  config.vm.provision "shell", inline: <<-SHELL
+    # Actualizar los repositorios e instalar Docker
+    sudo apt-get update
+    sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+    sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable"
+    sudo apt-get update
+    sudo apt-get install -y docker-ce
+
+    # Añadir el usuario vagrant al grupo docker
+    sudo usermod -aG docker vagrant
+
+    # Crear un directorio para la aplicación Node.js
+    mkdir -p /home/vagrant/nodeapp
+    cd /home/vagrant/nodeapp
+
+    # Crear un Dockerfile para la aplicación Node.js
+    cat <<EOF > Dockerfile
+    FROM node:14
+    WORKDIR /usr/src/app
+    COPY package*.json ./
+    RUN npm install
+    COPY . .
+    EXPOSE 8080
+    CMD [ "node", "app.js" ]
+EOF
+
+    # Crear un archivo package.json para la aplicación Node.js
+    cat <<EOF > package.json
+    {
+      "name": "nodeapp",
+      "version": "1.0.0",
+      "description": "Node.js app on Docker",
+      "main": "app.js",
+      "scripts": {
+        "start": "node app.js"
+      },
+      "dependencies": {
+        "express": "^4.17.1"
+      }
+    }
+EOF
+
+    # Crear el archivo principal de la aplicación Node.js
+    cat <<EOF > app.js
+    const express = require('express');
+    const app = express();
+    const port = 8080;
+
+    app.get('/', (req, res) => {
+      res.send('Hello World from Node.js in Docker!');
+    });
+
+    app.listen(port, () => {
+      console.log(`App running on http://localhost:${port}`);
+    });
+EOF
+
+    # Construir y ejecutar el contenedor Docker
+    sudo docker build -t nodeapp .
+    sudo docker run -d -p 8080:8080 --name nodeapp nodeapp
+  SHELL
+
+  # Configurar carpetas compartidas entre host y guest
+  config.vm.synced_folder ".", "/vagrant"
+end

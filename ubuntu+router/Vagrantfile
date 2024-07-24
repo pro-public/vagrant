@@ -1,0 +1,37 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+  # Definir la caja base de Ubuntu 20.04
+  config.vm.box = "ubuntu/focal64"
+
+  # Configurar dos interfaces de red: una NAT y una red privada
+  config.vm.network "forwarded_port", guest: 80, host: 8080
+  config.vm.network "private_network", type: "dhcp"
+
+  # Provisión de la máquina virtual
+  config.vm.provision "shell", inline: <<-SHELL
+    # Actualizar los repositorios e instalar iptables
+    sudo apt-get update
+    sudo apt-get install -y iptables-persistent net-tools
+
+    # Habilitar el reenvío de paquetes
+    sudo sysctl -w net.ipv4.ip_forward=1
+    sudo bash -c 'echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.conf'
+
+    # Configurar iptables para NAT
+    sudo iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+    sudo iptables -A FORWARD -i eth1 -o eth0 -j ACCEPT
+    sudo iptables -A FORWARD -i eth0 -o eth1 -m state --state RELATED,ESTABLISHED -j ACCEPT
+
+    # Guardar la configuración de iptables
+    sudo sh -c "iptables-save > /etc/iptables/rules.v4"
+
+    # Reiniciar los servicios necesarios
+    sudo systemctl restart networking
+  SHELL
+
+  # Configurar carpetas compartidas entre host y guest
+  config.vm.synced_folder ".", "/vagrant"
+end
+

@@ -1,0 +1,39 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+  # Definir la caja base de Ubuntu 20.04
+  config.vm.box = "ubuntu/focal64"
+
+  # Configurar la red para permitir el acceso desde la máquina host
+  config.vm.network "private_network", type: "dhcp"
+
+  # Provisión de la máquina virtual
+  config.vm.provision "shell", inline: <<-SHELL
+    # Actualizar los repositorios e instalar Samba
+    sudo apt-get update
+    sudo apt-get install -y samba
+
+    # Crear un directorio para compartir
+    sudo mkdir -p /srv/samba/share
+    sudo chown -R nobody:nogroup /srv/samba/share
+    sudo chmod 0775 /srv/samba/share
+
+    # Configurar Samba
+    sudo bash -c 'cat <<EOF >> /etc/samba/smb.conf
+[share]
+   path = /srv/samba/share
+   browsable = yes
+   writable = yes
+   guest ok = yes
+   read only = no
+EOF'
+
+    # Reiniciar el servicio de Samba
+    sudo systemctl restart smbd
+  SHELL
+
+  # Configurar carpetas compartidas entre host y guest
+  config.vm.synced_folder ".", "/vagrant"
+end
+
